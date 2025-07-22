@@ -1,0 +1,80 @@
+services:
+
+  db:
+    image: postgres:17
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      retries: 5
+      start_period: 30s
+      timeout: 10s
+    volumes:
+      - app-db-data:/var/lib/postgresql/data/pgdata
+    env_file:
+      - .env
+    environment:
+      - PGDATA=/var/lib/postgresql/data/pgdata
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD?Variable not set}
+      - POSTGRES_USER=${POSTGRES_USER?Variable not set}
+      - POSTGRES_DB=${POSTGRES_DB?Variable not set}
+
+  prestart:
+    image: '${DOCKER_IMAGE_BACKEND?Variable not set}:${TAG-latest}'
+    build:
+      context: ./backend
+    networks:
+      - default
+    depends_on:
+      db:
+        condition: service_healthy
+        restart: true
+    command: bash scripts/prestart.sh
+    env_file:
+      - .env
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT}
+      - POSTGRES_SERVER=db
+      - POSTGRES_PORT=${POSTGRES_PORT}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER?Variable not set}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD?Variable not set}
+      - CHAIN_ID=${CHAIN_ID?Variable not set}
+
+  backend:
+    image: '${DOCKER_IMAGE_BACKEND?Variable not set}:${TAG-latest}'
+    restart: always
+    networks:
+      - default
+    depends_on:
+      db:
+        condition: service_healthy
+        restart: true
+      prestart:
+        condition: service_completed_successfully
+    env_file:
+      - .env
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT}
+      - POSTGRES_SERVER=db
+      - POSTGRES_PORT=${POSTGRES_PORT}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER?Variable not set}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD?Variable not set}
+      - USER_MNEMONIC=${USER_MNEMONIC?Variable not set}
+      - MAIN_USER_MNEMONIC=${MAIN_USER_MNEMONIC?Variable not set}
+      - INFURA_ENDPOINT=${INFURA_ENDPOINT?Variable not set}
+      - INFURA_KEY=${INFURA_KEY?Variable not set}
+      - CHAIN_ID=${CHAIN_ID?Variable not set}
+      - USDC_ADDRESS=${USDC_ADDRESS?Variable not set}
+      - PYUSD_ADDRESS=${PYUSD_ADDRESS?Variable not set}
+      - EURC_ADDRESS=${EURC_ADDRESS?Variable not set}
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/utils/health-check/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  app-db-data:
